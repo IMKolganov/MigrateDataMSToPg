@@ -76,17 +76,17 @@ public class PGDatabaseHelper
             // Формируем строку с именами столбцов
             string columnNames = string.Join(", ", filteredColumns.ConvertAll(c =>
                 c.ColumnName.Equals("User", StringComparison.OrdinalIgnoreCase)
-                    ? "\"User\""
+                    ? "\"user\""
                     : c.ColumnName.Equals("Order", StringComparison.OrdinalIgnoreCase)
-                        ? "\"Order\""
+                        ? "\"order\""
                         : c.ColumnName.Equals("Description", StringComparison.OrdinalIgnoreCase)
-                            ? "\"Description\""
+                            ? "\"description\""
                             : c.ColumnName.Equals("From", StringComparison.OrdinalIgnoreCase)
-                                ? "\"From\""
+                                ? "\"from\""
                                 : c.ColumnName.Equals("Group", StringComparison.OrdinalIgnoreCase)
-                                    ? "\"Group\""
+                                    ? "\"group\""
                                     : c.ColumnName.Equals("Table", StringComparison.OrdinalIgnoreCase)
-                                        ? "\"Table\""
+                                        ? "\"table\""
                                         : $"\"{c.ColumnName.ToLower()}\""));
 
             // Проверяем, существует ли таблица
@@ -142,6 +142,11 @@ public class PGDatabaseHelper
                                 else if (column.DataType == "timestamp")
                                 {
                                     rowValues.Add("NULL");
+                                }
+                                // Преобразование для типа time
+                                else if (column.DataType == "time")
+                                {
+                                    rowValues.Add($"'{parameterValue.ToString()}'");  // Формат для поля типа time
                                 }
                                 // Преобразование bit в целое
                                 else if (column.DataType == "bit")

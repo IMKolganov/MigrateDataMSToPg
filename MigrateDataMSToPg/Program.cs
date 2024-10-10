@@ -1,24 +1,25 @@
 ﻿using System.Data;
 using System.Data.SqlClient;
 using MigrateDataMSToPg;
+using MigrateDataMSToPg.Configuries;
+using Newtonsoft.Json;
 using Npgsql;
 
 
-string mssqlServer = "RACKOT\\MSSQLSERVER01";
-string mssqlDatabase = "Nestle_CRM_Development_reserv";
-string mssqlUser = "migrate";
-string mssqlPassword = "1234";
+// Чтение конфигурации из файла
+string configFilePath = "db_config.json"; // Укажи путь к своему файлу
+var config = LoadConfig(configFilePath);
 
-// Параметры подключения к PostgreSQL
-string pgHost = "localhost";
-string pgDatabase = "Nestle_CRM_Development_AWS_without_constainces";
-string pgUser = "babelfish_user";
-string pgPassword = "12345678";
-int pgPort = 5433;
-string pgTableSchema = "nestle_crm_development_reserv_dbo";
 
-string mssqlConnectionString = $"Server={mssqlServer};Database={mssqlDatabase};User Id={mssqlUser};Password={mssqlPassword};";
-string pgConnectionString = $"Host={pgHost};Port={pgPort};Database={pgDatabase};Username={pgUser};Password={pgPassword}";
+// MSSQL connection string
+string mssqlConnectionString = $"Server={config.MSSQL.Server};Database={config.MSSQL.Database};User Id={config.MSSQL.User};Password={config.MSSQL.Password};";
+
+// PostgreSQL connection string
+string pgConnectionString = $"Host={config.PostgreSQL.Host};Port={config.PostgreSQL.Port};Database={config.PostgreSQL.Database};Username={config.PostgreSQL.User};Password={config.PostgreSQL.Password}";
+
+Console.WriteLine("MSSQL Connection String: " + mssqlConnectionString);
+Console.WriteLine("PostgreSQL Connection String: " + pgConnectionString);
+
 
 
 try
@@ -75,7 +76,7 @@ try
                 }
 
                 // Вставляем данные порциями в PostgreSQL
-                PGDatabaseHelper.BulkInsertIntoPostgreSQL(pgConn, msConn, pgTableSchema, table, tableColumns[table], dataTable);
+                PGDatabaseHelper.BulkInsertIntoPostgreSQL(pgConn, msConn, config.PostgreSQL.Schema, table, tableColumns[table], dataTable);
                 totalRowsProcessed += dataTable.Rows.Count;
 
                 // Увеличиваем offset для следующей порции данных
@@ -93,4 +94,21 @@ try
 catch (Exception ex)
 {
     Console.WriteLine($"Произошла ошибка: {ex.Message}");
+}
+
+
+
+static DatabaseConfig LoadConfig(string filePath)
+{
+    try
+    {
+        string json = File.ReadAllText(filePath);
+        var config = JsonConvert.DeserializeObject<DatabaseConfig>(json);
+        return config;
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine("Ошибка при загрузке конфигурации: " + ex.Message);
+        return null;
+    }
 }

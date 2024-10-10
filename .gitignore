@@ -399,3 +399,5 @@ FodyWeavers.xsd
 
 
 .idea/
+
+MigrateDataMSToPg/db_config.json

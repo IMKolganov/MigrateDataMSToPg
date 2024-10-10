@@ -23,24 +23,68 @@ string pgConnectionString = $"Host={pgHost};Port={pgPort};Database={pgDatabase};
 
 try
 {
+    
     // Создаем подключения к MSSQL и PostgreSQL
-    using (SqlConnection msConn = new SqlConnection(mssqlConnectionString))
-    using (var pgConn = new NpgsqlConnection(pgConnectionString))
+
+
+    var msDatabaseHelper = new MSDatabaseHelper();
+    // Получаем список таблиц и их столбцов из MSSQL
+    var tableColumns = msDatabaseHelper.GetTableColumns(mssqlConnectionString, pgConnectionString);
+    
+    
+    string processedTablesFilePath = "processedTables.txt"; // Путь к файлу с пройденными таблицами
+
+    // Считываем все обработанные таблицы из файла
+    var processedTables = new HashSet<string>();
+    if (File.Exists(processedTablesFilePath))
     {
-        msConn.Open();
-        pgConn.Open();
-        
-        var msDatabaseHelper = new MSDatabaseHelper(msConn);
-        // Получаем список таблиц и их столбцов из MSSQL
-        var tableColumns = msDatabaseHelper.GetTableColumns(mssqlConnectionString);
+        processedTables = new HashSet<string>(File.ReadAllLines(processedTablesFilePath));
+    }
+    
 
-        // Перенос данных из MSSQL в PostgreSQL
-        foreach (var table in tableColumns.Keys)
+    // Перенос данных из MSSQL в PostgreSQL
+    foreach (var table in tableColumns.Keys)
+    {
+        // Пропускаем таблицу, если она уже обработана
+        if (processedTables.Contains(table.ToLower()))
         {
-            DataTable dataTable = msDatabaseHelper.GetMSSQLTableData(msConn, table, tableColumns[table]);
-            PGDatabaseHelper.BulkInsertIntoPostgreSQL(pgConn, msConn, pgTableSchema, table, tableColumns[table],
-                dataTable);
+            Console.WriteLine($"Таблица {table} уже обработана, пропуск...");
+            continue;
+        }
 
+        var fetchSize = 10000;
+        
+        using (SqlConnection msConn = new SqlConnection(mssqlConnectionString))
+        using (var pgConn = new NpgsqlConnection(pgConnectionString))
+        {
+            msConn.Open();
+            pgConn.Open();
+            
+            int offset = 0;
+            int totalRowsProcessed = 0;
+
+            while (true)
+            {
+                // Загружаем данные порциями из MSSQL
+                DataTable dataTable = msDatabaseHelper.GetMSSQLTableData(msConn, table, tableColumns[table], offset, fetchSize);
+
+                if (dataTable.Rows.Count == 0)
+                {
+                    // Если данные закончились, выходим из цикла
+                    break;
+                }
+
+                // Вставляем данные порциями в PostgreSQL
+                PGDatabaseHelper.BulkInsertIntoPostgreSQL(pgConn, msConn, pgTableSchema, table, tableColumns[table], dataTable);
+                totalRowsProcessed += dataTable.Rows.Count;
+
+                // Увеличиваем offset для следующей порции данных
+                offset += fetchSize;
+            }
+
+            // После обработки всех данных, добавляем таблицу в список обработанных
+            File.AppendAllText(processedTablesFilePath, table.ToLower() + Environment.NewLine);
+            Console.WriteLine($"Таблица {table} успешно обработана. Всего строк обработано: {totalRowsProcessed}");
         }
     }
 

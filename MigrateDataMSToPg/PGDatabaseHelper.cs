@@ -241,6 +241,10 @@ public static void BulkInsertIntoPostgreSQL(NpgsqlConnection pgConnection, SqlCo
                     rowValues.Add($"'{parameterValue.ToString()}'"); // Преобразуем в формат time
                 }
             }
+            else if (parameterValue is byte[] byteArray)
+            {
+                rowValues.Add($"'{Convert.ToBase64String(byteArray)}'");  // Преобразуем в base64 для PostgreSQL
+            }
             // Преобразование bit в целое
             else if (column.DataType == "bit")
             {
@@ -269,7 +273,7 @@ public static void BulkInsertIntoPostgreSQL(NpgsqlConnection pgConnection, SqlCo
     {
         using (var cmd = new NpgsqlCommand(insertQuery.ToString(), pgConnection))
         {
-            Console.WriteLine(insertQuery.ToString());
+            // Console.WriteLine(insertQuery.ToString());
             cmd.ExecuteNonQuery();
         }
     }

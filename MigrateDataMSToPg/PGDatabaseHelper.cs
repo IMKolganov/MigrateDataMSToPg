@@ -81,8 +81,13 @@ public class PGDatabaseHelper
                         ? "\"Order\""
                         : c.ColumnName.Equals("Description", StringComparison.OrdinalIgnoreCase)
                             ? "\"Description\""
-                            : $"\"{c.ColumnName.ToLower()}\""));
-
+                            : c.ColumnName.Equals("From", StringComparison.OrdinalIgnoreCase)
+                                ? "\"From\""
+                                : c.ColumnName.Equals("Group", StringComparison.OrdinalIgnoreCase)
+                                    ? "\"Group\""
+                                    : c.ColumnName.Equals("Table", StringComparison.OrdinalIgnoreCase)
+                                        ? "\"Table\""
+                                        : $"\"{c.ColumnName.ToLower()}\""));
 
             // Проверяем, существует ли таблица
             if (!TableExists(pgConnection, tableName, tableSchema))

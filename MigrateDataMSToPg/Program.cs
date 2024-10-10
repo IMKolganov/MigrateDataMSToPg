@@ -20,49 +20,27 @@ string pgTableSchema = "nestle_crm_development_reserv_dbo";
 string mssqlConnectionString = $"Server={mssqlServer};Database={mssqlDatabase};User Id={mssqlUser};Password={mssqlPassword};";
 string pgConnectionString = $"Host={pgHost};Port={pgPort};Database={pgDatabase};Username={pgUser};Password={pgPassword}";
 
-var msDatabaseHelper = new MSDatabaseHelper(mssqlConnectionString);
 
 try
 {
-    
-    List<TableInfo> tables = msDatabaseHelper.GetTablesAndSizes();
-
-    msDatabaseHelper.GetColumnsForTables(tables);
-
-    var consolePrinter = new ConsolePrinter();
-    consolePrinter.PrintTableInfo(tables);
-    
-    var tableColumns = msDatabaseHelper.GetTableColumns(mssqlConnectionString);
-    // Генерируем INSERT запросы
-    foreach (var table in tableColumns.Keys)
+    // Создаем подключения к MSSQL и PostgreSQL
+    using (SqlConnection msConn = new SqlConnection(mssqlConnectionString))
+    using (var pgConn = new NpgsqlConnection(pgConnectionString))
     {
-        string insertQuery = msDatabaseHelper.GenerateInsertQuery(table, tableColumns[table]);
-        Console.WriteLine(insertQuery);
-        Console.WriteLine();
-    }
-}
-catch (Exception ex)
-{
-    Console.WriteLine($"Произошла ошибка: {ex.Message}");
-}
+        msConn.Open();
+        pgConn.Open();
+        
+        var msDatabaseHelper = new MSDatabaseHelper(msConn);
+        // Получаем список таблиц и их столбцов из MSSQL
+        var tableColumns = msDatabaseHelper.GetTableColumns(mssqlConnectionString);
 
-try
-{
-    // Получаем список таблиц и их столбцов из MSSQL
-    var tableColumns = msDatabaseHelper.GetTableColumns(mssqlConnectionString);
-
-    // Перенос данных из MSSQL в PostgreSQL
-    foreach (var table in tableColumns.Keys)
-    {
-        // Создаем подключения к MSSQL и PostgreSQL
-        using (SqlConnection msConn = new SqlConnection(mssqlConnectionString))
-        using (var pgConn = new NpgsqlConnection(pgConnectionString))
+        // Перенос данных из MSSQL в PostgreSQL
+        foreach (var table in tableColumns.Keys)
         {
             DataTable dataTable = msDatabaseHelper.GetMSSQLTableData(msConn, table, tableColumns[table]);
-            msConn.Open();
-            pgConn.Open();
-            PGDatabaseHelper.BulkInsertIntoPostgreSQL(pgConn, msConn, pgTableSchema,table, tableColumns[table],
+            PGDatabaseHelper.BulkInsertIntoPostgreSQL(pgConn, msConn, pgTableSchema, table, tableColumns[table],
                 dataTable);
+
         }
     }
 

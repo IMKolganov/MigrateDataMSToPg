@@ -10,11 +10,12 @@ using System.Data.SqlClient;
 
 public class MSDatabaseHelper
 {
-    private readonly string _connectionString;
+    private readonly SqlConnection _msSQLConnection;
+    
 
-    public MSDatabaseHelper(string connectionString)
+    public MSDatabaseHelper(SqlConnection msSQLConnection)
     {
-        _connectionString = connectionString;
+        _msSQLConnection = msSQLConnection;
     }
 
     // Метод для получения списка таблиц и их размеров
@@ -48,25 +49,21 @@ public class MSDatabaseHelper
                SCHEMA_NAME(t.schema_id), t.name;
             ";
 
-        using (SqlConnection conn = new SqlConnection(_connectionString))
+        using (SqlCommand cmd = new SqlCommand(query, _msSQLConnection))
         {
-            conn.Open();
-            using (SqlCommand cmd = new SqlCommand(query, conn))
+            using (SqlDataReader reader = cmd.ExecuteReader())
             {
-                using (SqlDataReader reader = cmd.ExecuteReader())
+                while (reader.Read())
                 {
-                    while (reader.Read())
-                    {
-                        string schema = reader["TableSchema"].ToString();
-                        string tableName = reader["TableName"].ToString();
-                        double sizeMB = Convert.ToDouble(reader["TotalSpaceMB"]);
+                    string schema = reader["TableSchema"].ToString();
+                    string tableName = reader["TableName"].ToString();
+                    double sizeMB = Convert.ToDouble(reader["TotalSpaceMB"]);
 
-                        tables.Add(new TableInfo
-                        {
-                            TableName = $"{schema}.{tableName}",
-                            SizeMB = sizeMB
-                        });
-                    }
+                    tables.Add(new TableInfo
+                    {
+                        TableName = $"{schema}.{tableName}",
+                        SizeMB = sizeMB
+                    });
                 }
             }
         }
@@ -88,27 +85,24 @@ public class MSDatabaseHelper
                     TABLE_SCHEMA, TABLE_NAME, ORDINAL_POSITION;
             ";
 
-        using (SqlConnection conn = new SqlConnection(_connectionString))
+
+        using (SqlCommand cmd = new SqlCommand(query, _msSQLConnection))
         {
-            conn.Open();
-            using (SqlCommand cmd = new SqlCommand(query, conn))
+            using (SqlDataReader reader = cmd.ExecuteReader())
             {
-                using (SqlDataReader reader = cmd.ExecuteReader())
+                while (reader.Read())
                 {
-                    while (reader.Read())
+                    string schema = reader["TABLE_SCHEMA"].ToString();
+                    string tableName = reader["TABLE_NAME"].ToString();
+                    string columnName = reader["COLUMN_NAME"].ToString();
+
+                    string fullTableName = $"{schema}.{tableName}";
+                    TableInfo table = tables.Find(t =>
+                        t.TableName.Equals(fullTableName, StringComparison.OrdinalIgnoreCase));
+
+                    if (table != null)
                     {
-                        string schema = reader["TABLE_SCHEMA"].ToString();
-                        string tableName = reader["TABLE_NAME"].ToString();
-                        string columnName = reader["COLUMN_NAME"].ToString();
-
-                        string fullTableName = $"{schema}.{tableName}";
-                        TableInfo table = tables.Find(t =>
-                            t.TableName.Equals(fullTableName, StringComparison.OrdinalIgnoreCase));
-
-                        if (table != null)
-                        {
-                            table.Columns.Add(columnName);
-                        }
+                        table.Columns.Add(columnName);
                     }
                 }
             }
@@ -133,26 +127,22 @@ public class MSDatabaseHelper
                     TABLE_NAME, ORDINAL_POSITION;
             ";
 
-        using (SqlConnection conn = new SqlConnection(connectionString))
+        using (SqlCommand cmd = new SqlCommand(query, _msSQLConnection))
         {
-            conn.Open();
-            using (SqlCommand cmd = new SqlCommand(query, conn))
+            using (SqlDataReader reader = cmd.ExecuteReader())
             {
-                using (SqlDataReader reader = cmd.ExecuteReader())
+                while (reader.Read())
                 {
-                    while (reader.Read())
+                    string tableName = reader["TABLE_NAME"].ToString();
+                    string columnName = reader["COLUMN_NAME"].ToString();
+                    string dataType = reader["DATA_TYPE"].ToString();
+
+                    if (!tableColumns.ContainsKey(tableName))
                     {
-                        string tableName = reader["TABLE_NAME"].ToString();
-                        string columnName = reader["COLUMN_NAME"].ToString();
-                        string dataType = reader["DATA_TYPE"].ToString();
-
-                        if (!tableColumns.ContainsKey(tableName))
-                        {
-                            tableColumns[tableName] = new List<(string ColumnName, string DataType)>();
-                        }
-
-                        tableColumns[tableName].Add((columnName, dataType));
+                        tableColumns[tableName] = new List<(string ColumnName, string DataType)>();
                     }
+
+                    tableColumns[tableName].Add((columnName, dataType));
                 }
             }
         }

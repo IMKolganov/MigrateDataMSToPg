@@ -15,10 +15,9 @@ public class MSDatabaseHelper
 
     }
     
-    
-    
     // Метод для получения списка столбцов для каждой таблицы
-    internal Dictionary<string, List<(string ColumnName, string DataType)>> GetTableColumns(string mssqlConnectionString, string pgConnectionString)
+    internal Dictionary<string, List<(string ColumnName, string DataType)>> GetTableColumns(
+        string mssqlConnectionString, string pgConnectionString)
     {
         using (SqlConnection msConn = new SqlConnection(mssqlConnectionString))
         using (var pgConn = new NpgsqlConnection(pgConnectionString))
@@ -69,9 +68,10 @@ public class MSDatabaseHelper
             return tableColumns;
         }
     }
-    
+
     // Метод для получения данных из MSSQL
-    public DataTable GetMSSQLTableData(SqlConnection msConn, string tableName, List<(string ColumnName, string DataType)> columns, int offset, int fetchSize)
+    public DataTable GetMSSQLTableData(SqlConnection msConn, string tableName,
+        List<(string ColumnName, string DataType)> columns, int offset, int fetchSize)
     {
         DataTable dataTable = new DataTable();
 

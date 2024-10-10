@@ -6,33 +6,22 @@ using Newtonsoft.Json;
 using Npgsql;
 
 
-// Чтение конфигурации из файла
-string configFilePath = "db_config.json"; // Укажи путь к своему файлу
+string configFilePath = "db_config.json";
 var config = LoadConfig(configFilePath);
 
-
-// MSSQL connection string
 string mssqlConnectionString = $"Server={config.MSSQL.Server};Database={config.MSSQL.Database};User Id={config.MSSQL.User};Password={config.MSSQL.Password};";
-
-// PostgreSQL connection string
 string pgConnectionString = $"Host={config.PostgreSQL.Host};Port={config.PostgreSQL.Port};Database={config.PostgreSQL.Database};Username={config.PostgreSQL.User};Password={config.PostgreSQL.Password}";
 
 Console.WriteLine("MSSQL Connection String: " + mssqlConnectionString);
 Console.WriteLine("PostgreSQL Connection String: " + pgConnectionString);
 
-
-
 try
 {
-    
-    // Создаем подключения к MSSQL и PostgreSQL
-
-
     var msDatabaseHelper = new MSDatabaseHelper();
     // Получаем список таблиц и их столбцов из MSSQL
     var tableColumns = msDatabaseHelper.GetTableColumns(mssqlConnectionString, pgConnectionString);
-    
-    
+
+
     string processedTablesFilePath = "processedTables.txt"; // Путь к файлу с пройденными таблицами
 
     // Считываем все обработанные таблицы из файла
@@ -41,7 +30,7 @@ try
     {
         processedTables = new HashSet<string>(File.ReadAllLines(processedTablesFilePath));
     }
-    
+
 
     // Перенос данных из MSSQL в PostgreSQL
     foreach (var table in tableColumns.Keys)
@@ -54,20 +43,21 @@ try
         }
 
         var fetchSize = 10000;
-        
+
         using (SqlConnection msConn = new SqlConnection(mssqlConnectionString))
         using (var pgConn = new NpgsqlConnection(pgConnectionString))
         {
             msConn.Open();
             pgConn.Open();
-            
+
             int offset = 0;
             int totalRowsProcessed = 0;
 
             while (true)
             {
                 // Загружаем данные порциями из MSSQL
-                DataTable dataTable = msDatabaseHelper.GetMSSQLTableData(msConn, table, tableColumns[table], offset, fetchSize);
+                DataTable dataTable =
+                    msDatabaseHelper.GetMSSQLTableData(msConn, table, tableColumns[table], offset, fetchSize);
 
                 if (dataTable.Rows.Count == 0)
                 {
@@ -76,7 +66,8 @@ try
                 }
 
                 // Вставляем данные порциями в PostgreSQL
-                PGDatabaseHelper.BulkInsertIntoPostgreSQL(pgConn, msConn, config.PostgreSQL.Schema, table, tableColumns[table], dataTable);
+                PGDatabaseHelper.BulkInsertIntoPostgreSQL(pgConn, msConn, config.PostgreSQL.Schema, table,
+                    tableColumns[table], dataTable);
                 totalRowsProcessed += dataTable.Rows.Count;
 
                 // Увеличиваем offset для следующей порции данных

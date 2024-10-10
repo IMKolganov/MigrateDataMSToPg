@@ -7,32 +7,31 @@ namespace MigrateDataMSToPg;
 
 public class PGDatabaseHelper
 {
-    public static void InsertDataIntoPostgreSQL(string connectionString, string tableName, string tableSchema, List<(string ColumnName, string DataType)> columns, DataTable dataTable)
+    public static void InsertDataIntoPostgreSQL(string connectionString, string tableName, string tableSchema,
+        List<(string ColumnName, string DataType)> columns, DataTable dataTable)
     {
         using (var conn = new NpgsqlConnection(connectionString))
         {
             conn.Open();
 
-            // Проверяем, существует ли таблица
             if (!TableExists(conn, tableName, tableSchema))
             {
                 Console.WriteLine($"Таблица '{tableName}' не найдена в базе данных PostgreSQL.");
-                return; // Выходим, если таблицы нет
+                return;
             }
-            
-            // Исключаем столбцы с типом "timestamp" (или "rowversion" в MSSQL)
-            // var filteredColumns = columns.Where(c => c.DataType != "timestamp" && c.DataType != "rowversion").ToList();
+
             var filteredColumns = columns.ToList();
-            
-            
+
+
             Console.WriteLine($"Таблица '{tableName}' найдена в базе данных PostgreSQL. Подготовка и импорт данных...");
             foreach (DataRow row in dataTable.Rows)
             {
                 string columnNames = string.Join(", ", filteredColumns.ConvertAll(c => $"\"{c.ColumnName}\""));
                 string columnValues = string.Join(", ", filteredColumns.ConvertAll(c => "@" + c.ColumnName));
 
-                string insertQuery = $"INSERT INTO {tableSchema}.\"{tableName.ToLower()}\" ({columnNames}) OVERRIDING SYSTEM VALUE VALUES ({columnValues});";
-                
+                string insertQuery =
+                    $"INSERT INTO {tableSchema}.\"{tableName.ToLower()}\" ({columnNames}) OVERRIDING SYSTEM VALUE VALUES ({columnValues});";
+
                 Console.WriteLine($"Executing query: {insertQuery}");
 
                 using (var cmd = new NpgsqlCommand(insertQuery, conn))
@@ -40,89 +39,90 @@ public class PGDatabaseHelper
                     foreach (var column in filteredColumns)
                     {
                         var parameterValue = row[column.ColumnName];
-                        
+
                         if (column.DataType == "timestamp")
                         {
                             parameterValue = DBNull.Value;
                         }
-                        
+
                         if (column.DataType == "bit")
                         {
                             parameterValue = parameterValue != DBNull.Value && (bool)parameterValue ? 1 : 0;
                         }
-                        
-                        
+
+
                         cmd.Parameters.AddWithValue($"@{column.ColumnName}", parameterValue);
-                        
+
                         Console.WriteLine($"@{column.ColumnName} = {parameterValue}");
                     }
 
                     cmd.ExecuteNonQuery();
                 }
             }
-            
+
             Console.WriteLine(new string('-', 50)); // Разделитель для лучшей читаемости вывода
         }
     }
 
-public static void BulkInsertIntoPostgreSQL(NpgsqlConnection pgConnection, SqlConnection msConn, string tableSchema, 
-    string tableName, List<(string ColumnName, string DataType)> filteredColumns, DataTable dataTable)
-{
-    try
+    public static void BulkInsertIntoPostgreSQL(NpgsqlConnection pgConnection, SqlConnection msConn, string tableSchema,
+        string tableName, List<(string ColumnName, string DataType)> filteredColumns, DataTable dataTable)
     {
-        int batchSize = 1000; // Размер батча для пакетной вставки
-        int rowCount = dataTable.Rows.Count;
-
-        // Формируем строку с именами столбцов
-        string columnNames = GetColumnNames(filteredColumns);
-
-        // Проверяем, существует ли таблица
-        if (!TableExists(pgConnection, tableName, tableSchema))
+        try
         {
-            Console.WriteLine($"Таблица '{tableName}' не найдена в базе данных PostgreSQL.");
-            return; // Выходим, если таблицы нет
-        }
+            int batchSize = 1000; // Размер батча для пакетной вставки
+            int rowCount = dataTable.Rows.Count;
 
-        int msCount = GetRowCountInMsSql(msConn, tableName);
-        int pgCount = GetRowCountInPostgreSQL(pgConnection, tableSchema, tableName);
+            // Формируем строку с именами столбцов
+            string columnNames = GetColumnNames(filteredColumns);
 
-        Console.WriteLine($"Таблица: {tableName} - Количество записей в MSSQL: {msCount}, в PostgreSQL: {pgCount}");
-
-        // Проверяем, если в PostgreSQL больше или столько же записей, пропускаем таблицу
-        if (pgCount >= msCount)
-        {
-            Console.WriteLine($"Пропуск таблицы '{tableName}' — записи уже существуют.");
-            return;
-        }
-
-        using (var transaction = pgConnection.BeginTransaction()) // Используем транзакцию
-        {
-            try
+            // Проверяем, существует ли таблица
+            if (!TableExists(pgConnection, tableName, tableSchema))
             {
-                for (int i = 0; i < rowCount; i += batchSize)
+                Console.WriteLine($"Таблица '{tableName}' не найдена в базе данных PostgreSQL.");
+                return; // Выходим, если таблицы нет
+            }
+
+            int msCount = GetRowCountInMsSql(msConn, tableName);
+            int pgCount = GetRowCountInPostgreSQL(pgConnection, tableSchema, tableName);
+
+            Console.WriteLine($"Таблица: {tableName} - Количество записей в MSSQL: {msCount}, в PostgreSQL: {pgCount}");
+
+            // Проверяем, если в PostgreSQL больше или столько же записей, пропускаем таблицу
+            if (pgCount >= msCount)
+            {
+                Console.WriteLine($"Пропуск таблицы '{tableName}' — записи уже существуют.");
+                return;
+            }
+
+            using (var transaction = pgConnection.BeginTransaction()) // Используем транзакцию
+            {
+                try
                 {
-                    int currentBatchSize = Math.Min(batchSize, rowCount - i);
-                    var insertQuery = PrepareInsertQuery(filteredColumns, tableSchema, tableName, dataTable, i, currentBatchSize);
+                    for (int i = 0; i < rowCount; i += batchSize)
+                    {
+                        int currentBatchSize = Math.Min(batchSize, rowCount - i);
+                        var insertQuery = PrepareInsertQuery(filteredColumns, tableSchema, tableName, dataTable, i,
+                            currentBatchSize);
 
-                    ExecuteBatchInsert(pgConnection, insertQuery);
+                        ExecuteBatchInsert(pgConnection, insertQuery);
 
-                    Console.WriteLine($"Batch of {currentBatchSize} rows inserted into {tableName}.");
+                        Console.WriteLine($"Batch of {currentBatchSize} rows inserted into {tableName}.");
+                    }
+
+                    transaction.Commit(); // Коммит транзакции
                 }
-
-                transaction.Commit(); // Коммит транзакции
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error during bulk insert: {ex.Message}");
-                transaction.Rollback(); // Откат транзакции в случае ошибки
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error during bulk insert: {ex.Message}");
+                    transaction.Rollback(); // Откат транзакции в случае ошибки
+                }
             }
         }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error during bulk insert: {ex.Message}");
+        }
     }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"Error during bulk insert: {ex.Message}");
-    }
-}
 
 
 // Метод для проверки, существует ли таблица в базе данных PostgreSQL
@@ -140,7 +140,7 @@ public static void BulkInsertIntoPostgreSQL(NpgsqlConnection pgConnection, SqlCo
             return (bool)cmd.ExecuteScalar(); // Возвращает true, если таблица существует
         }
     }
-    
+
     public static int GetRowCountInMsSql(SqlConnection msConn, string tableName)
     {
         string query = $"SELECT COUNT(*) FROM {tableName};";
@@ -159,7 +159,7 @@ public static void BulkInsertIntoPostgreSQL(NpgsqlConnection pgConnection, SqlCo
             return (int)rowCount; // Приводим long к int, но будьте осторожны с большими значениями
         }
     }
-    
+
     private static string GetColumnNames(List<(string ColumnName, string DataType)> filteredColumns)
     {
         return string.Join(", ", filteredColumns.ConvertAll(c =>
@@ -177,11 +177,14 @@ public static void BulkInsertIntoPostgreSQL(NpgsqlConnection pgConnection, SqlCo
                                     ? "\"table\""
                                     : $"\"{c.ColumnName.ToLower()}\""));
     }
-    
-    private static StringBuilder PrepareInsertQuery(List<(string ColumnName, string DataType)> filteredColumns, string tableSchema, 
+
+    private static StringBuilder PrepareInsertQuery(List<(string ColumnName, string DataType)> filteredColumns,
+        string tableSchema,
         string tableName, DataTable dataTable, int startIndex, int batchSize)
     {
-        var insertQuery = new StringBuilder($"INSERT INTO {tableSchema}.\"{tableName.ToLower()}\" ({GetColumnNames(filteredColumns)}) OVERRIDING SYSTEM VALUE VALUES ");
+        var insertQuery =
+            new StringBuilder(
+                $"INSERT INTO {tableSchema}.\"{tableName.ToLower()}\" ({GetColumnNames(filteredColumns)}) OVERRIDING SYSTEM VALUE VALUES ");
 
         var allRows = new List<string>();
         for (int j = startIndex; j < startIndex + batchSize; j++)
@@ -243,7 +246,7 @@ public static void BulkInsertIntoPostgreSQL(NpgsqlConnection pgConnection, SqlCo
             }
             else if (parameterValue is byte[] byteArray)
             {
-                rowValues.Add($"'{Convert.ToBase64String(byteArray)}'");  // Преобразуем в base64 для PostgreSQL
+                rowValues.Add($"'{Convert.ToBase64String(byteArray)}'"); // Преобразуем в base64 для PostgreSQL
             }
             // Преобразование bit в целое
             else if (column.DataType == "bit")
